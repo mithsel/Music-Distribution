@@ -1,24 +1,22 @@
-const Auth = {
-	async signUp({ email, password, plan }) {
-		await API.signUp({ email, password, plan });
-		return true;
-	},
-	async signIn({ email, password }) {
-		await API.signIn({ email, password });
-		return true;
-	},
-	signOut() {
-		sessionStorage.removeItem('token');
-	},
-	requireAuth() {
-		const token = sessionStorage.getItem('token');
-		if (!token) {
-			window.location.href = 'signup.html';
-			throw new Error('Not signed in');
-		}
-		return { token, email: '' };
-	}
-};
+import jwt from 'jsonwebtoken';
+import { get } from '../db.js';
 
-window.Auth = Auth;
+export function signToken(payload) {
+	return jwt.sign(payload, process.env.JWT_SECRET || 'dev_secret', { expiresIn: '7d' });
+}
+
+export async function requireAuth(req, res, next) {
+	try {
+		const auth = req.headers.authorization || '';
+		const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+		if (!token) return res.status(401).json({ error: 'Missing token' });
+		const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev_secret');
+		const user = await get('SELECT id, email, plan, lifetime, trial_started_at, payout_method FROM users WHERE id = ?', [decoded.uid]);
+		if (!user) return res.status(401).json({ error: 'Invalid token' });
+		req.user = user;
+		next();
+	} catch (e) {
+		return res.status(401).json({ error: 'Unauthorized' });
+	}
+}
 
