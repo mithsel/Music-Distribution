@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width,initial-scale=1" />
+	<title>Dashboard — IndieWave</title>
+	<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<header class="nav" style="background:linear-gradient(90deg, rgba(125,211,252,0.10), rgba(192,132,252,0.10));">
+	<div class="nav__brand"><img src="logo.png" alt="Logo" class="logo" /></div>
+		<nav class="nav__links">
+			<a href="#" id="logoutBtn" class="btn btn--small">Logout</a>
+		</nav>
+	</header>
+
+	<section class="section">
+		<h2>Welcome, <span id="userEmail"></span></h2>
+
+		<div class="grid grid--2">
+			<div class="card">
+				<h3>Upload a Track</h3>
+				<form id="uploadForm" class="form">
+					<div class="form__row">
+						<label>Title</label>
+						<input type="text" id="title" required />
+					</div>
+					<div class="form__row">
+						<label>Cover Art</label>
+						<input type="file" id="cover" accept="image/*" />
+					</div>
+					<div class="form__row">
+						<label>Audio File</label>
+						<input type="file" id="audio" accept="audio/*" required />
+					</div>
+					<div class="form__row">
+						<label>Release Date</label>
+						<input type="date" id="releaseDate" />
+					</div>
+					<button type="submit" class="btn btn--primary">Upload & Distribute</button>
+					<p id="uploadNote" class="muted"></p>
+				</form>
+			</div>
+
+			<div class="card">
+				<h3>Plan & Usage</h3>
+				<p><strong>Plan:</strong> <span id="planName"></span></p>
+				<p><strong>Songs Distributed:</strong> <span id="songCount"></span></p>
+				<p id="trialNote" class="muted"></p>
+				<button id="upgradeBtn" class="btn btn--outline">Upgrade to Lifetime (₹599)</button>
+			</div>
+		</div>
+
+		<div class="grid grid--3 mtop">
+			<div class="stat">
+				<div class="stat__label">Total Streams</div>
+				<div class="stat__value" id="streamsTotal">0</div>
+			</div>
+			<div class="stat">
+				<div class="stat__label">Revenue (₹)</div>
+				<div class="stat__value" id="revenueTotal">0.00</div>
+			</div>
+			<div class="stat">
+				<div class="stat__label">Pending Payout (₹)</div>
+				<div class="stat__value" id="payoutPending">0.00</div>
+			</div>
+		</div>
+
+		<div class="card mtop">
+			<h3>Your Releases</h3>
+			<table class="table" id="songsTable">
+				<thead>
+					<tr>
+						<th>Title</th>
+						<th>Release Date</th>
+						<th>Streams</th>
+						<th>Revenue (₹)</th>
+						<th>Status</th>
+					</tr>
+				</thead>
+				<tbody></tbody>
+			</table>
+		</div>
+
+		<div class="card mtop">
+			<h3>Payouts</h3>
+			<p>Connect payout method (mock):</p>
+			<form id="payoutForm" class="form form--inline">
+				<input type="text" id="payoutMethod" placeholder="UPI or Bank (mock)" />
+				<button class="btn btn--outline" type="submit">Save</button>
+				<button class="btn btn--primary" id="requestPayoutBtn" type="button">Request Payout</button>
+			</form>
+			<p id="payoutMsg" class="muted"></p>
+		</div>
+	</section>
+
+	<script src="api.js"></script>
+	<script src="auth.js"></script>
+	<script>
+		(async function () {
+			const user = Auth.requireAuth();
+			document.getElementById('userEmail').textContent = user.email;
+
+			const state = await API.getDashboard();
+			document.getElementById('planName').textContent = state.plan.toUpperCase();
+			document.getElementById('songCount').textContent = state.songs.length;
+			document.getElementById('streamsTotal').textContent = state.analytics.total_streams?.toLocaleString?.() || state.analytics.totalStreams?.toLocaleString?.() || '0';
+			document.getElementById('revenueTotal').textContent = (state.analytics.total_revenue ?? state.analytics.totalRevenue ?? 0).toFixed(2);
+			document.getElementById('payoutPending').textContent = (state.analytics.payout_pending ?? state.analytics.payoutPending ?? 0).toFixed(2);
+
+			const tbody = document.querySelector('#songsTable tbody');
+			tbody.innerHTML = '';
+			(state.songs || []).forEach(s => {
+				const tr = document.createElement('tr');
+				tr.innerHTML = `
+					<td>${s.title}</td>
+					<td>${s.release_date || s.releaseDate || '-'}</td>
+					<td>${(s.streams || 0).toLocaleString()}</td>
+					<td>${(s.revenue || 0).toFixed(2)}</td>
+					<td>${s.status}</td>
+				`;
+				tbody.appendChild(tr);
+			});
+
+			const trialNote = document.getElementById('trialNote');
+			const uploadNote = document.getElementById('uploadNote');
+			if (state.plan === 'trial') {
+				const remaining = Math.max(0, 1 - (state.songs?.length || 0));
+				trialNote.textContent = `Trial: You can distribute ${remaining} more song(s) until your 30-day trial ends.`;
+				if (remaining <= 0) {
+					uploadNote.textContent = 'Trial limit reached. Upgrade to distribute unlimited songs.';
+				}
+			} else if (state.plan === 'free') {
+				trialNote.textContent = 'Free plan: Distribution is disabled. Upgrade to start distributing.';
+				uploadNote.textContent = 'Upgrade required to upload.';
+			}
+
+			document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+				e.preventDefault();
+				const title = document.getElementById('title').value.trim();
+				const audio = document.getElementById('audio').files[0];
+				const cover = document.getElementById('cover').files[0];
+				const releaseDate = document.getElementById('releaseDate').value;
+
+				try {
+					await API.uploadSong({ title, audio, cover, releaseDate });
+					alert('Uploaded (dev). Files stored locally by backend.');
+					window.location.reload();
+				} catch (err) {
+					alert(err.message || 'Upload failed');
+				}
+			});
+
+			document.getElementById('upgradeBtn').addEventListener('click', async () => {
+				try {
+					await API.upgradeToLifetime();
+					alert('Upgraded.');
+					window.location.reload();
+				} catch (e) {
+					alert(e.message || 'Upgrade failed');
+				}
+			});
+
+			document.getElementById('payoutForm').addEventListener('submit', async (e) => {
+				e.preventDefault();
+				await API.savePayoutMethod(document.getElementById('payoutMethod').value.trim());
+				document.getElementById('payoutMsg').textContent = 'Payout method saved (dev).';
+			});
+
+			document.getElementById('requestPayoutBtn').addEventListener('click', async () => {
+				try {
+					const res = await API.requestPayout();
+					document.getElementById('payoutMsg').textContent = `Payout requested: ₹${res.amount.toFixed(2)} (dev).`;
+					document.getElementById('payoutPending').textContent = '0.00';
+				} catch (err) {
+					alert(err.message || 'Payout failed');
+				}
+			});
+
+			document.getElementById('logoutBtn').addEventListener('click', () => {
+				Auth.signOut();
+				window.location.href = 'index.html';
+			});
+		})();
+	</script>
+</body>
+</html>
+

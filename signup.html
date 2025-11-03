@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width,initial-scale=1" />
+	<title>Sign up — IndieWave</title>
+	<link rel="stylesheet" href="styles.css" />
+	<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</head>
+<body>
+<header class="nav" style="background:linear-gradient(90deg, rgba(125,211,252,0.10), rgba(192,132,252,0.10));">
+	<div class="nav__brand"><img src="logo.png" alt="Logo" class="logo" /></div>
+		<nav class="nav__links">
+			<a href="index.html">Home</a>
+			<a href="index.html#pricing">Pricing</a>
+		</nav>
+	</header>
+
+<section class="section" style="background: radial-gradient(50% 40% at 90% 10%, rgba(125,211,252,0.10), transparent), radial-gradient(40% 30% at 10% 20%, rgba(192,132,252,0.10), transparent);">
+		<h2>Create your account</h2>
+		<form id="signupForm" class="form card sm">
+			<div class="form__row">
+				<label>Email</label>
+				<input type="email" id="email" required />
+			</div>
+			<div class="form__row">
+				<label>Password</label>
+				<input type="password" id="password" minlength="6" required />
+			</div>
+
+			<div class="form__row">
+				<label>Choose Plan</label>
+				<div class="radio-group">
+					<label><input type="radio" name="plan" value="free" /> Free</label>
+					<label><input type="radio" name="plan" value="trial" /> Distributor (30-day trial, 1 song)</label>
+					<label><input type="radio" name="plan" value="lifetime" /> Lifetime (₹599, unlimited)</label>
+				</div>
+			</div>
+
+			<div id="paymentSection" class="hidden">
+				<div class="form__row">
+					<label>Payment (Mock)</label>
+					<input type="text" placeholder="Card number (mock)" />
+				</div>
+			</div>
+
+			<button type="submit" class="btn btn--primary">Continue</button>
+
+			<p class="muted">
+				By signing up, you agree to our <a href="terms.html">Terms</a> and <a href="privacy.html">Privacy Policy</a>.
+			</p>
+
+			<p>Already have an account? <a href="#" id="signinLink">Sign in</a></p>
+		</form>
+	</section>
+
+	<script src="api.js"></script>
+	<script src="auth.js"></script>
+	<script>
+		(function () {
+			const params = new URLSearchParams(window.location.search);
+			const prePlan = params.get('plan');
+			if (prePlan) {
+				document.querySelectorAll('input[name="plan"]').forEach(r => {
+					r.checked = r.value === prePlan;
+				});
+			}
+
+			const planInputs = document.querySelectorAll('input[name="plan"]');
+			const paymentSection = document.getElementById('paymentSection');
+
+			const onPlanChange = () => {
+				const plan = [...planInputs].find(r => r.checked)?.value;
+				paymentSection.classList.toggle('hidden', plan !== 'lifetime');
+			};
+			planInputs.forEach(r => r.addEventListener('change', onPlanChange));
+			onPlanChange();
+
+			document.getElementById('signupForm').addEventListener('submit', async (e) => {
+				e.preventDefault();
+				const email = document.getElementById('email').value.trim();
+				const password = document.getElementById('password').value;
+				const plan = [...planInputs].find(r => r.checked)?.value || 'free';
+
+				try {
+					await Auth.signUp({ email, password, plan });
+					window.location.href = 'dashboard.html';
+				} catch (err) {
+					alert(err.message || 'Signup failed');
+				}
+			});
+
+			document.getElementById('signinLink').addEventListener('click', async (e) => {
+				e.preventDefault();
+				const email = prompt('Email:');
+				const password = prompt('Password:');
+				if (!email || !password) return;
+				try {
+					await Auth.signIn({ email, password });
+					window.location.href = 'dashboard.html';
+				} catch (err) {
+					alert(err.message || 'Sign in failed');
+				}
+			});
+		})();
+	</script>
+</body>
+</html>
+
